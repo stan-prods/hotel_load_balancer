@@ -1,11 +1,13 @@
 const int smallBreak = 60;
 const int bigBreak = 900;
 const int attemptMinutes = 3;
+const int activationInterval = 15;
 const int genRestoreSeconds = 5;
 const int voltageNorm = 230;
 const int allowedVoltageDeviationPercent = 15;
 
 unsigned int lastShotdownTimestamp;
+unsigned int lastActivationTimestamp;
 
 struct ControlLine {
     int inputPin;
@@ -138,8 +140,11 @@ void monitorControlLines () {
     for (byte i = 0; i < 6; i++) {
         populateSingleLineData(controlLines[i]);
 
-        if (!controlLines[i].isActive && controlLines[i].timeoutUntil < millis()) {
-            activateConrolLine(controlLines[i]);
+        if (getVoltageDropPerc() < allowedVoltageDeviationPercent / 2 && (lastActivationTimestamp - millis() / 1000) > activationInterval) {
+            if (!controlLines[i].isActive && controlLines[i].timeoutUntil < millis()) {
+                activateConrolLine(controlLines[i]);
+                lastActivationTimestamp = millis();
+            }
         }
     }
 }
