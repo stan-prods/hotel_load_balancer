@@ -10,7 +10,6 @@ unsigned long avg0, avg1;
 void loop(void)
 {
   int16_t adc0, adc1, adc2, adc3, adc4, adc5, adc6, adc7;
-   
   unsigned long currentTimestamp = millis() / 1000;
 
   count++;
