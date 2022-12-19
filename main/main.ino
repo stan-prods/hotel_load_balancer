@@ -9,14 +9,20 @@ const int allowedVoltageDeviationPercent = 13;
 unsigned int lastShotdownTimestamp;
 unsigned int lastActivationTimestamp;
 
-struct ControlLine {
-    int inputPin;
-    int outputPin;
-    bool isActive;
-    int currentValue;
+struct Measure {
+    int value;
     int averageValue;
     int readingsInAverage;
     int valueTimestamp;
+};
+
+Measure voltage;
+
+struct ControlLine {
+    int inputPin;
+    int outputPin;
+    Measure current;
+    bool isActive;
     unsigned int timeoutUntil;
     int attempts;
     int lastMinute[60];
@@ -77,7 +83,7 @@ ControlLine shutdownLine () {
             continue;
         }
 
-        if (controlLines[i].currentValue > controlLines[biggest].currentValue) {
+        if (controlLines[i].current.value > controlLines[biggest].current.value) {
             biggest = i;
         }
     }
@@ -86,10 +92,18 @@ ControlLine shutdownLine () {
     lastShotdownTimestamp = millis();
 }
 
-int currentVoltage;
-int averageVoltage;
-int readingsInAverageVoltage;
-int voltageTimestamp;
+void measure(Measure m, int value) {
+    if (m.valueTimestamp < millis() / 1000) {
+        m.valueTimestamp = millis() / 1000;
+
+        m.value = m.averageValue / m.readingsInAverage;
+        m.averageValue = 0;
+        m.readingsInAverage = 0;
+    }
+
+    m.averageValue += value;
+    m.readingsInAverage++;
+}
 
 void updateVoltage() {
     int value = abs(analogRead(A0) - 512);
@@ -98,24 +112,15 @@ void updateVoltage() {
         //TODO emergency shotdown
     }
 
-    if (voltageTimestamp < millis() / 1000) {
-        voltageTimestamp = millis() / 1000;
-
-        currentVoltage = averageVoltage / readingsInAverageVoltage;
-        averageVoltage = 0;
-        readingsInAverageVoltage = 0;
-    }
-
-    averageVoltage += value;
-    readingsInAverageVoltage++;
+    measure(voltage, value);
 }
 
 int getVoltageDropPerc() {
-    if (currentVoltage > voltageNorm) {
+    if (voltage.value > voltageNorm) {
         return 0;
     }
 
-    return 100 - currentVoltage / voltageNorm * 100;
+    return 100 - voltage.value / voltageNorm * 100;
 }
 
 void monitorVoltate() {
@@ -129,17 +134,7 @@ void monitorVoltate() {
 void populateSingleLineData (ControlLine cl) {
     int value = analogRead(cl.inputPin);
 
-
-    if (cl.valueTimestamp < millis() / 1000) {
-        cl.valueTimestamp = millis() / 1000;
-
-        cl.currentValue = cl.averageValue / cl.readingsInAverage;
-        cl.averageValue = 0;
-        cl.readingsInAverage = 0;
-    }
-
-    cl.averageValue += value;
-    cl.readingsInAverage++;
+    measure(cl.current, value);
 
     //TODO create history
 }
