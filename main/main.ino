@@ -4,7 +4,7 @@ const int attemptMinutes = 3;
 const int activationInterval = 15;
 const int genRestoreSeconds = 5;
 const int voltageNorm = 230;
-const int allowedVoltageDeviationPercent = 15;
+const int allowedVoltageDeviationPercent = 13;
 
 unsigned int lastShotdownTimestamp;
 unsigned int lastActivationTimestamp;
@@ -94,6 +94,10 @@ int voltageTimestamp;
 void updateVoltage() {
     int value = abs(analogRead(A0) - 512);
 
+    if (value > 260) {
+        //TODO emergency shotdown
+    }
+
     if (voltageTimestamp < millis() / 1000) {
         voltageTimestamp = millis() / 1000;
 
@@ -107,7 +111,11 @@ void updateVoltage() {
 }
 
 int getVoltageDropPerc() {
-    return 0;
+    if (currentVoltage > voltageNorm) {
+        return 0;
+    }
+
+    return 100 - currentVoltage / voltageNorm * 100;
 }
 
 void monitorVoltate() {
