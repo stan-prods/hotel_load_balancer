@@ -42,6 +42,7 @@ ControlLine activateConrolLine (ControlLine cl) {
     if (cl.timeoutUntil < millis()) {
         cl.isActive = true;
         digitalWrite(cl.outputPin, HIGH);
+        lastActivationTimestamp = millis();
     }
 
     return cl;
@@ -146,7 +147,6 @@ void monitorControlLines () {
         if (getVoltageDropPerc() < allowedVoltageDeviationPercent / 2 && (lastActivationTimestamp - millis() / 1000) > activationInterval) {
             if (!controlLines[i].isActive && controlLines[i].timeoutUntil < millis()) {
                 activateConrolLine(controlLines[i]);
-                lastActivationTimestamp = millis();
             }
         }
     }
