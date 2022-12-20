@@ -133,7 +133,7 @@ void monitorVoltate() {
 }
 
 void populateSingleLineData (ControlLine cl) {
-    int value = analogRead(cl.inputPin);
+    int value = abs(analogRead(cl.inputPin) - 768); //for base voltage 3.3
 
     measure(cl.current, value);
 
