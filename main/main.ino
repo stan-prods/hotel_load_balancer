@@ -124,7 +124,7 @@ int getVoltageDropPerc() {
     return 100 - voltage.value / voltageNorm * 100;
 }
 
-void monitorVoltate() {
+void monitorVoltage() {
     updateVoltage();
 
     if (getVoltageDropPerc() > allowedVoltageDeviationPercent && millis() > lastShotdownTimestamp * (genRestoreSeconds * 1000)) {
@@ -154,5 +154,5 @@ void monitorControlLines () {
 
 void loop(void) {
     monitorControlLines();
-    monitorVoltate();
+    monitorVoltage();
 }
