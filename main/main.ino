@@ -8,15 +8,17 @@ const byte genRestoreSeconds = 5;
 const byte voltageNorm = 230;
 const byte allowedVoltageDeviationPercent = 13;
 
-const byte measureIntervalSec = 2;
+const byte measureSecFracture = 2;
 
 unsigned int lastShotdownTimestamp;
 unsigned int lastActivationTimestamp;
 
 struct Measure {
     int value;
-    int averageValue;
-    byte readingsInAverage;
+    int minAverageValue;
+    int maxAverageValue;
+    int sinCenter;
+    int measuresCount;
     unsigned int valueTimestamp;
 };
 
@@ -97,25 +99,36 @@ ControlLine shutdownLine () {
 bool isDataPrinted;
 bool isVoltageMeasured;
 void measure(Measure &m, int value) {
-    unsigned int sec = millis() / 1000;
+    unsigned int sec = millis() / (1000 / measureSecFracture);
 
-    if (m.valueTimestamp + (measureIntervalSec - 1) < sec) {
+    if (m.valueTimestamp < sec) {
         m.valueTimestamp = sec;
 
+        if (!m.sinCenter) {
+            m.sinCenter = m.maxAverageValue - m.minAverageValue;
+        } else {
+            m.sinCenter = (m.sinCenter + (m.maxAverageValue - m.minAverageValue)) / 2;
+        }
 
-        m.value = m.averageValue / m.readingsInAverage;
+        m.value = max(m.maxAverageValue, m.sinCenter + m.minAverageValue);
+
         if (isVoltageMeasured) {
             Serial.print(String(m.value));
             Serial.print(" ");
             isDataPrinted = true;
         }
-        m.averageValue = 0;
-        m.readingsInAverage = 0;
+        m.minAverageValue = 0;
+        m.maxAverageValue = 0;
+        m.measuresCount = 0;
 
     }
 
-    m.averageValue += value;
-    m.readingsInAverage++;
+    if (value < m.minAverageValue) {
+        m.minAverageValue = value;
+    } else if (value > m.maxAverageValue) {
+        m.maxAverageValue = value;
+    }
+    m.measuresCount++;
 }
 
 void updateVoltage() {
@@ -180,4 +193,5 @@ void monitorControlLines () {
 void loop(void) {
     monitorControlLines();
     monitorVoltage();
+    delay(random(4));
 }
