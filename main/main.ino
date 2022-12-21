@@ -1,44 +1,47 @@
-const int smallBreak = 60;
-const int bigBreak = 900;
-const int attemptMinutes = 3;
-const int activationInterval = 15;
-const int genRestoreSeconds = 5;
-const int voltageNorm = 230;
-const int allowedVoltageDeviationPercent = 13;
+const int controlLinesAmount = 5;
+
+const byte smallBreak = 6;
+const byte bigBreak = 90;
+const byte attemptMinutes = 3;
+const byte activationInterval = 15;
+const byte genRestoreSeconds = 5;
+const byte voltageNorm = 230;
+const byte allowedVoltageDeviationPercent = 13;
+
+const byte measureSecFracture = 2;
 
 unsigned int lastShotdownTimestamp;
 unsigned int lastActivationTimestamp;
 
 struct Measure {
     int value;
-    int averageValue;
-    int readingsInAverage;
-    int valueTimestamp;
+    int minAverageValue;
+    int maxAverageValue;
+    int sinCenter;
+    int measuresCount;
+    unsigned int valueTimestamp;
 };
 
 Measure voltage;
 
 struct ControlLine {
-    int inputPin;
-    int outputPin;
+    byte inputPin;
+    byte outputPin;
     Measure current;
     bool isActive;
     unsigned int timeoutUntil;
-    int attempts;
-    int lastMinute[60];
-    int lastHour[60];
+    byte attempts;
 };
 
-ControlLine controlLines[6] {
+ControlLine controlLines[controlLinesAmount] {
     {A1, 8},
     {A2, 7},
     {A3, 6},
     {A4, 5},
-    {A5, 4},
-    {A6, 3}
+    {A5, 4}
 };
 
-ControlLine activateConrolLine (ControlLine cl) {
+ControlLine activateConrolLine (ControlLine &cl) {
     if (cl.timeoutUntil < millis()) {
         cl.isActive = true;
         digitalWrite(cl.outputPin, HIGH);
@@ -48,7 +51,7 @@ ControlLine activateConrolLine (ControlLine cl) {
     return cl;
 }
 
-ControlLine deactivateControlLine (ControlLine cl) {
+ControlLine deactivateControlLine (ControlLine &cl) {
     cl.isActive = false;
     digitalWrite(cl.outputPin, LOW);
 
@@ -58,14 +61,14 @@ ControlLine deactivateControlLine (ControlLine cl) {
         cl.attempts = 0;
     }
 
-    cl.timeoutUntil = millis() + ((cl.attempts < 3 ? smallBreak : bigBreak) * 1000);
+    cl.timeoutUntil = millis() + ((cl.attempts < 3 ? smallBreak : bigBreak) * 10 * 1000);
 
     return cl;
 }
 
 void setup(void) {
     Serial.begin(9600);
-    for (byte i = 0; i < 6; i++) {
+    for (byte i = 0; i < controlLinesAmount; i++) {
         pinMode(controlLines[i].inputPin, INPUT);
         pinMode(controlLines[i].outputPin, OUTPUT);
     }
@@ -74,7 +77,7 @@ void setup(void) {
 
 ControlLine shutdownLine () {
     int biggest = -1;
-    for (byte i = 0; i < 6; i++) {
+    for (byte i = 0; i < controlLinesAmount; i++) {
         if (!controlLines[i].isActive) {
             continue;
         }
@@ -93,27 +96,43 @@ ControlLine shutdownLine () {
     lastShotdownTimestamp = millis();
 }
 
-void measure(Measure m, int value) {
-    if (m.valueTimestamp < millis() / 1000) {
-        m.valueTimestamp = millis() / 1000;
+void measure(Measure &m, int value) {
+    unsigned int sec = millis() / (1000 / measureSecFracture);
 
-        m.value = m.averageValue / m.readingsInAverage;
-        m.averageValue = 0;
-        m.readingsInAverage = 0;
+    if (m.valueTimestamp < sec) {
+        m.valueTimestamp = sec;
+
+        if (!m.sinCenter) {
+            m.sinCenter = m.maxAverageValue - m.minAverageValue;
+        } else {
+            m.sinCenter = (m.sinCenter + (m.maxAverageValue - m.minAverageValue)) / 2;
+        }
+
+        m.value = max(m.maxAverageValue, m.sinCenter + m.minAverageValue);
+
+        m.minAverageValue = 0;
+        m.maxAverageValue = 0;
+        m.measuresCount = 0;
+
     }
 
-    m.averageValue += value;
-    m.readingsInAverage++;
+    if (value < m.minAverageValue) {
+        m.minAverageValue = value;
+    } else if (value > m.maxAverageValue) {
+        m.maxAverageValue = value;
+    }
+    m.measuresCount++;
 }
 
 void updateVoltage() {
-    int value = abs(analogRead(A0) - 512);
+    int value = analogRead(A0);
 
     if (value > 260) {
         //TODO emergency shotdown
     }
 
     measure(voltage, value);
+
 }
 
 int getVoltageDropPerc() {
@@ -132,7 +151,7 @@ void monitorVoltage() {
     }
 }
 
-void populateSingleLineData (ControlLine cl) {
+void populateSingleLineData (ControlLine &cl) {
     int value = abs(analogRead(cl.inputPin) - 768); //for base voltage 3.3
 
     measure(cl.current, value);
@@ -141,7 +160,7 @@ void populateSingleLineData (ControlLine cl) {
 }
 
 void monitorControlLines () {
-    for (byte i = 0; i < 6; i++) {
+    for (byte i = 0; i < controlLinesAmount; i++) {
         populateSingleLineData(controlLines[i]);
 
         if (getVoltageDropPerc() < allowedVoltageDeviationPercent / 2 && (lastActivationTimestamp - millis() / 1000) > activationInterval) {
@@ -155,4 +174,5 @@ void monitorControlLines () {
 void loop(void) {
     monitorControlLines();
     monitorVoltage();
+    delay(random(4));
 }
