@@ -96,8 +96,6 @@ ControlLine shutdownLine () {
     lastShotdownTimestamp = millis();
 }
 
-bool isDataPrinted;
-bool isVoltageMeasured;
 void measure(Measure &m, int value) {
     unsigned int sec = millis() / (1000 / measureSecFracture);
 
@@ -112,11 +110,6 @@ void measure(Measure &m, int value) {
 
         m.value = max(m.maxAverageValue, m.sinCenter + m.minAverageValue);
 
-        if (isVoltageMeasured) {
-            Serial.print(String(m.value));
-            Serial.print(" ");
-            isDataPrinted = true;
-        }
         m.minAverageValue = 0;
         m.maxAverageValue = 0;
         m.measuresCount = 0;
@@ -132,26 +125,14 @@ void measure(Measure &m, int value) {
 }
 
 void updateVoltage() {
-    int reading = analogRead(A0);
-    int value = abs(reading - 512);
-
-    Serial.print(value);
-    Serial.print(" ");
-    Serial.println(reading - 512);
+    int value = analogRead(A0);
 
     if (value > 260) {
         //TODO emergency shotdown
     }
 
-    //isVoltageMeasured = true;
-
     measure(voltage, value);
 
-    isVoltageMeasured = false;
-    if (isDataPrinted) {
-        isDataPrinted = false;
-        Serial.println(" ");
-    }
 }
 
 int getVoltageDropPerc() {
