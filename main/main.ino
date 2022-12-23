@@ -1,5 +1,3 @@
-const int controlLinesAmount = 5;
-
 const byte smallBreak = 6;
 const byte bigBreak = 90;
 const byte attemptMinutes = 3;
@@ -33,12 +31,15 @@ struct ControlLine {
     byte attempts;
 };
 
+
+const int controlLinesAmount = 6;
 ControlLine controlLines[controlLinesAmount] {
     {A1, 8},
     {A2, 7},
     {A3, 6},
     {A4, 5},
-    {A5, 4}
+    {A5, 4},
+    {A6, 3}
 };
 
 ControlLine activateConrolLine (ControlLine &cl) {
@@ -71,6 +72,7 @@ void setup(void) {
     for (byte i = 0; i < controlLinesAmount; i++) {
         pinMode(controlLines[i].inputPin, INPUT);
         pinMode(controlLines[i].outputPin, OUTPUT);
+        digitalWrite(controlLines[i].outputPin, LOW);
     }
 }
 
@@ -132,15 +134,19 @@ void updateVoltage() {
     }
 
     measure(voltage, value);
+    if(voltage.value/3 < 150) {
+        voltage.value = 0;
+    }
+    Serial.println(voltage.value/3);
 
 }
 
 int getVoltageDropPerc() {
-    if (voltage.value > voltageNorm) {
+    if (voltage.value / 3 > voltageNorm) {
         return 0;
     }
 
-    return 100 - voltage.value / voltageNorm * 100;
+    return 100 - (voltage.value / 3) / voltageNorm * 100;
 }
 
 void monitorVoltage() {
@@ -152,7 +158,7 @@ void monitorVoltage() {
 }
 
 void populateSingleLineData (ControlLine &cl) {
-    int value = abs(analogRead(cl.inputPin) - 768); //for base voltage 3.3
+    int value = analogRead(cl.inputPin);
 
     measure(cl.current, value);
 
@@ -163,8 +169,8 @@ void monitorControlLines () {
     for (byte i = 0; i < controlLinesAmount; i++) {
         populateSingleLineData(controlLines[i]);
 
-        if (getVoltageDropPerc() < allowedVoltageDeviationPercent / 2 && (lastActivationTimestamp - millis() / 1000) > activationInterval) {
-            if (!controlLines[i].isActive && controlLines[i].timeoutUntil < millis()) {
+        if (!controlLines[i].isActive && controlLines[i].timeoutUntil < millis()) {
+            if (getVoltageDropPerc() < allowedVoltageDeviationPercent / 2 && (lastActivationTimestamp - millis() / 1000) > activationInterval) {
                 activateConrolLine(controlLines[i]);
             }
         }
@@ -172,7 +178,8 @@ void monitorControlLines () {
 }
 
 void loop(void) {
-    monitorControlLines();
     monitorVoltage();
+    monitorControlLines();
+
     delay(random(4));
 }
