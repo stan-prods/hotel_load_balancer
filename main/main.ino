@@ -1,15 +1,16 @@
-const byte smallBreak = 6;
-const byte bigBreak = 90;
-const byte attemptMinutes = 3;
-const byte activationInterval = 15;
+const int smallBreak = 60;
+const int bigBreak = 900;
+const byte attemptMinutes = 10;
+const byte activationInterval = 8;
 const byte genRestoreSeconds = 5;
 const byte voltageNorm = 230;
 const byte allowedVoltageDeviationPercent = 13;
 
 const byte measureSecFracture = 2;
 
-unsigned int lastShotdownTimestamp;
-unsigned int lastActivationTimestamp;
+unsigned long sec;
+unsigned long lastShotdownTimestamp;
+unsigned long lastActivationTimestamp;
 
 struct Measure {
     int value;
@@ -17,7 +18,8 @@ struct Measure {
     int maxAverageValue;
     int sinCenter;
     int measuresCount;
-    unsigned int valueTimestamp;
+    int lastValueMeasuresCount;
+    unsigned long valueTimestamp;
 };
 
 Measure voltage;
@@ -27,7 +29,7 @@ struct ControlLine {
     byte outputPin;
     Measure current;
     bool isActive;
-    unsigned int timeoutUntil;
+    unsigned long timeoutUntil;
     byte attempts;
 };
 
@@ -43,10 +45,10 @@ ControlLine controlLines[controlLinesAmount] {
 };
 
 ControlLine activateConrolLine (ControlLine &cl) {
-    if (cl.timeoutUntil < millis()) {
+    if (cl.timeoutUntil < sec) {
         cl.isActive = true;
         digitalWrite(cl.outputPin, HIGH);
-        lastActivationTimestamp = millis();
+        lastActivationTimestamp = sec;
     }
 
     return cl;
@@ -55,14 +57,18 @@ ControlLine activateConrolLine (ControlLine &cl) {
 ControlLine deactivateControlLine (ControlLine &cl) {
     cl.isActive = false;
     digitalWrite(cl.outputPin, LOW);
+}
 
-    if (cl.timeoutUntil - millis() < 60000 * attemptMinutes) {
+ControlLine banControlLine (ControlLine &cl) {
+    if (cl.timeoutUntil - sec < 60 * attemptMinutes) {
         cl.attempts++;
     } else {
         cl.attempts = 0;
     }
 
-    cl.timeoutUntil = millis() + ((cl.attempts < 3 ? smallBreak : bigBreak) * 10 * 1000);
+    cl.timeoutUntil = sec + (cl.attempts < 3 ? smallBreak : bigBreak);
+
+    deactivateControlLine(cl);
 
     return cl;
 }
@@ -94,13 +100,11 @@ ControlLine shutdownLine () {
         }
     }
 
-    deactivateControlLine(controlLines[biggest]);
-    lastShotdownTimestamp = millis();
+    banControlLine(controlLines[biggest]);
+    lastShotdownTimestamp = sec;
 }
 
-void measure(Measure &m, int value) {
-    unsigned int sec = millis() / (1000 / measureSecFracture);
-
+int measure(Measure &m, int value) {
     if (m.valueTimestamp < sec) {
         m.valueTimestamp = sec;
 
@@ -110,8 +114,9 @@ void measure(Measure &m, int value) {
             m.sinCenter = (m.sinCenter + (m.maxAverageValue - m.minAverageValue)) / 2;
         }
 
-        m.value = max(m.maxAverageValue, m.sinCenter + m.minAverageValue);
+        m.value = max(m.maxAverageValue, m.sinCenter + m.minAverageValue) / 3;
 
+        m.lastValueMeasuresCount = m.measuresCount;
         m.minAverageValue = 0;
         m.maxAverageValue = 0;
         m.measuresCount = 0;
@@ -124,35 +129,32 @@ void measure(Measure &m, int value) {
         m.maxAverageValue = value;
     }
     m.measuresCount++;
+    return m.value;
 }
 
 void updateVoltage() {
-    int value = analogRead(A0);
-
-    if (value > 260) {
-        //TODO emergency shotdown
-    }
-
-    measure(voltage, value);
-    if(voltage.value/3 < 150) {
-        voltage.value = 0;
-    }
-    Serial.println(voltage.value/3);
+    int value = measure(voltage, analogRead(A0));
 
 }
 
 int getVoltageDropPerc() {
-    if (voltage.value / 3 > voltageNorm) {
+    if (voltage.value > voltageNorm) {
         return 0;
     }
 
-    return 100 - (voltage.value / 3) / voltageNorm * 100;
+    return 100 - voltage.value * 100 / voltageNorm;
 }
 
 void monitorVoltage() {
     updateVoltage();
 
-    if (getVoltageDropPerc() > allowedVoltageDeviationPercent && millis() > lastShotdownTimestamp * (genRestoreSeconds * 1000)) {
+    if (voltage.value > 260 || voltage.value < 150) {
+        for (byte i = 0; i < controlLinesAmount; i++) {
+            deactivateControlLine(controlLines[i]);
+        }
+    }
+
+    if (getVoltageDropPerc() > allowedVoltageDeviationPercent && (sec - lastShotdownTimestamp > genRestoreSeconds)) {
         shutdownLine();
     }
 }
@@ -169,17 +171,49 @@ void monitorControlLines () {
     for (byte i = 0; i < controlLinesAmount; i++) {
         populateSingleLineData(controlLines[i]);
 
-        if (!controlLines[i].isActive && controlLines[i].timeoutUntil < millis()) {
-            if (getVoltageDropPerc() < allowedVoltageDeviationPercent / 2 && (lastActivationTimestamp - millis() / 1000) > activationInterval) {
+        if (!controlLines[i].isActive && controlLines[i].timeoutUntil < sec) {
+            if ((getVoltageDropPerc() < allowedVoltageDeviationPercent) && ((sec - lastActivationTimestamp) > activationInterval)) {
                 activateConrolLine(controlLines[i]);
             }
         }
     }
 }
 
+unsigned long lastPrintTimestamp;
+unsigned long prevLastPrintTimestamp;
+void printInfo () {
+    if (sec - lastPrintTimestamp > 2) {
+        prevLastPrintTimestamp = lastPrintTimestamp;
+        lastPrintTimestamp = sec;
+
+        Serial.print(" ");
+        Serial.print(voltage.value);
+
+        Serial.print(" ");
+        Serial.print(getVoltageDropPerc());
+
+        Serial.print(" ");
+        Serial.print(voltage.lastValueMeasuresCount);
+
+        for (byte i = 0; i < controlLinesAmount; i++) {
+
+            Serial.print(" ");
+            Serial.print(controlLines[i].isActive);
+        }
+
+        for (byte i = 0; i < controlLinesAmount; i++) {
+
+            Serial.print(" ");
+            Serial.print(controlLines[i].current.value);
+        }
+        Serial.println(" ");
+    }
+}
 void loop(void) {
+    sec = millis() / 1000;
     monitorVoltage();
     monitorControlLines();
 
+    printInfo();
     delay(random(4));
 }
