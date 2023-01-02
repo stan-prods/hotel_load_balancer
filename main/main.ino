@@ -12,6 +12,7 @@
 #define voltageBoundaries {260, 215, 200, 190}
 #define frequencyBoundaries {60, 48, 42, 38}
 
+byte status;
 
 unsigned long msec;
 unsigned long sec;
@@ -94,6 +95,7 @@ void deactivateAll () {
     for (byte i = 0; i < controlLinesAmount; i++) {
         deactivateControlLine(controlLines[i]);
     }
+    status = 4;
 }
 
 ControlLine banControlLine (ControlLine &cl) {
@@ -154,6 +156,8 @@ ControlLine shutdownLine () {
     banControlLine(controlLines[biggest]);
     lastLineShutdownTimestamp = sec;
 
+    status = 5;
+
     return controlLines[biggest];
 }
 
@@ -161,9 +165,10 @@ ControlLine shutdownLine () {
 void shutdownGenInput () {
     digitalWrite(genControlPin, HIGH);
     lastGenShutdownTimestamp = sec;
+    status = 2;
 }
 
-int measureFrequency (FrequencyMeasure f) {
+int measureFrequency (FrequencyMeasure &f) {
     if (f.valueTimestamp < (msec / (1000 / measureSecFraction))) {
         f.valueTimestamp = (msec / (1000 / measureSecFraction));
 
@@ -216,9 +221,10 @@ void updateVoltage () {
     int value = measureAmplitude(voltage, analogRead(A0));
 }
 
-void chooseAction (Measure m) {
+void chooseAction (Measure &m) {
     if (m.value == 0 && m.prevValue == 0)  {
         m.isControlLinesAllowed = true;
+        status = 0;
     } else {
         if (m.value <= m.boundaries.bottomAllowedValue && m.prevValue <= m.boundaries.bottomAllowedValue) {
             shutdownGenInput();
@@ -234,6 +240,7 @@ void chooseAction (Measure m) {
             m.isControlLinesAllowed = false;
         } else {
             m.isControlLinesAllowed = true;
+            status = 1;
         }
     }
 }
@@ -285,26 +292,76 @@ void printInfo () {
         prevLastPrintTimestamp = lastPrintTimestamp;
         lastPrintTimestamp = sec;
 
-        Serial.print(" ");
+        Serial.print("| ");
         Serial.print(frequency.value);
+        Serial.print("Hz");
 
-        Serial.print(" ");
+        Serial.print(" => ");
+        Serial.print(frequency.isControlLinesAllowed ? " GO " : "NO GO");
+
+        Serial.print(" | ");
         Serial.print(voltage.value);
+        Serial.print("v");
 
-        Serial.print(" ");
+        Serial.print(" => ");
+        Serial.print(voltage.isControlLinesAllowed ? " GO " : "NO GO");
+
+
+        Serial.print(" | ");
         Serial.print(voltage.prevValueMeasuresCount);
+        Serial.print(" mes/s");
+
+        if (voltage.prevValueMeasuresCount - 100 < 0) {
+            Serial.print(" ");
+        }
+
+        Serial.print(" | ");
+        Serial.print(" Input: ");
+        Serial.print(digitalRead(genControlPin) ? "Off" : "On ");
+
+        Serial.print(" | ");
+        Serial.print(" Lines: ");
 
         for (byte i = 0; i < controlLinesAmount; i++) {
 
             Serial.print(" ");
-            Serial.print(controlLines[i].isActive);
+            Serial.print(controlLines[i].isActive ? "On " : "Off");
         }
+
+        Serial.print(" | ");
+        Serial.print(" Current per line: ");
 
         for (byte i = 0; i < controlLinesAmount; i++) {
 
             Serial.print(" ");
             Serial.print(controlLines[i].current.value);
         }
+
+        Serial.print(" aa");
+
+        Serial.print(" | ");
+        Serial.print(" Last status: ");
+        switch (status) {
+            case 0:
+                Serial.print("No sensor data, all lines allowed");
+                break;
+            case 1:
+                Serial.print("all lines allowed");
+                break;
+            case 2:
+                Serial.print("Bottom allowed value reached, gen input deactivated");
+                break;
+            case 3:
+                Serial.print("Top allowed value reached, all lines deactivated");
+                break;
+            case 4:
+                Serial.print("Deactivate all lines");
+                break;
+            case 5:
+                Serial.print("Deactivating one line");
+                break;
+        }
+
         Serial.println(" ");
     }
 }
@@ -315,8 +372,9 @@ void loop(void) {
 
     monitorFrequency();
     monitorVoltage();
-    monitorControlLines();
     monitorGenInput();
+
+    monitorControlLines();
 
     printInfo();
     delay(random(4));
