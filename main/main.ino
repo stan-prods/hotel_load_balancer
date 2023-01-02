@@ -1,37 +1,64 @@
-const byte attemptMinutes = 10;
-const byte activationInterval = 8;
-const byte genRestoreSeconds = 0; //time before disabling next cl
-const byte voltageNorm = 230;
-const int topAllowedVoltage = 260;
-const int bottomAllowedVoltage = 208;
-const byte lineBanVoltage = 215;
+#define frequencyMeasurePin 2
+#define genControlPin 3
+
+#define attemptMinutes 10
+#define activationInterval 8
+#define lineShutdownInterval 0 //time before disabling next cl
+#define genRestoreInterval 10
+#define measureSecFraction 4
+
+#define bottomMeasurementVoltage 150
+
+#define voltageBoundaries {260, 215, 200, 190}
+#define frequencyBoundaries {60, 48, 42, 38}
+
 
 unsigned long msec;
 unsigned long sec;
-const byte measureSecFraction = 4;
 
-unsigned long lastShotdownTimestamp;
-unsigned long lastActivationTimestamp;
+unsigned long lastLineShutdownTimestamp;
+unsigned long lastLineActivationTimestamp;
+unsigned long lastGenShutdownTimestamp;
+
+struct Boundaries {
+    int topAllowedValue;
+    byte lineBanValue;
+    byte linesShutdownValue;
+    byte bottomAllowedValue;
+} noBoundaries;
 
 struct Measure {
     int value;
     int prevValue;
+
+    unsigned long valueTimestamp;
+
+    bool isControlLinesAllowed;
+    Boundaries boundaries = noBoundaries;
+};
+
+struct AmplitudeMeasure : Measure {
     int minAverageValue;
     int maxAverageValue;
     int sinCenter;
     int measuresCount;
     int prevValueMeasuresCount;
-    unsigned long valueTimestamp;
-};
+} voltage;
 
-Measure voltage;
+struct FrequencyMeasure : Measure {
+    int reading;
+    int prevReading;
+
+    int interruptsCount;
+} frequency;
+
 
 struct ControlLine {
     byte inputPin;
     byte outputPin;
     int smallBreakSecs;
     int bigBreakSecs;
-    Measure current;
+    AmplitudeMeasure current;
     bool isActive;
     unsigned long timeoutUntil;
     byte attempts;
@@ -40,19 +67,19 @@ struct ControlLine {
 
 const int controlLinesAmount = 6;
 ControlLine controlLines[controlLinesAmount] {
-    {A1, 8, 60, 60},
-    {A2, 7, 60, 900},
-    {A3, 6, 60, 900},
-    {A4, 5, 60, 900},
-    {A5, 4, 60, 900},
-    {A6, 3, 60, 120}
+    {A1, 9, 60, 60},
+    {A2, 8, 60, 900},
+    {A3, 7, 60, 900},
+    {A4, 6, 60, 900},
+    {A5, 5, 60, 900},
+    {A6, 4, 60, 120}
 };
 
 ControlLine activateConrolLine (ControlLine &cl) {
     if (cl.timeoutUntil < sec) {
         cl.isActive = true;
         digitalWrite(cl.outputPin, HIGH);
-        lastActivationTimestamp = sec;
+        lastLineActivationTimestamp = sec;
     }
 
     return cl;
@@ -83,8 +110,22 @@ ControlLine banControlLine (ControlLine &cl) {
     return cl;
 }
 
-void setup(void) {
+void frequencyInterrupt () {
+    frequency.interruptsCount++;
+}
+
+void setup (void) {
     Serial.begin(9600);
+
+    pinMode(genControlPin, OUTPUT);
+    digitalWrite(genControlPin, LOW);
+
+    pinMode(frequencyMeasurePin, INPUT);
+    attachInterrupt(digitalPinToInterrupt(frequencyMeasurePin), frequencyInterrupt, RISING);
+
+    voltage.boundaries = voltageBoundaries;
+    frequency.boundaries = frequencyBoundaries;
+
     for (byte i = 0; i < controlLinesAmount; i++) {
         pinMode(controlLines[i].inputPin, INPUT);
         pinMode(controlLines[i].outputPin, OUTPUT);
@@ -111,10 +152,38 @@ ControlLine shutdownLine () {
     }
 
     banControlLine(controlLines[biggest]);
-    lastShotdownTimestamp = sec;
+    lastLineShutdownTimestamp = sec;
+
+    return controlLines[biggest];
 }
 
-int measure(Measure &m, int value) {
+
+void shutdownGenInput () {
+    digitalWrite(genControlPin, HIGH);
+    lastGenShutdownTimestamp = sec;
+}
+
+int measureFrequency (FrequencyMeasure f) {
+    if (f.valueTimestamp < (msec / (1000 / measureSecFraction))) {
+        f.valueTimestamp = (msec / (1000 / measureSecFraction));
+
+        f.prevReading = f.reading;
+        f.reading = f.interruptsCount;
+        f.interruptsCount = 0;
+
+        f.prevValue = f.value;
+
+        if (f.reading == 0 || f.prevReading == 0) {
+            f.value = 0;
+        } else {
+            f.value = (f.reading + f.prevReading) * (measureSecFraction / 2);
+        }
+    }
+
+    return f.value;
+}
+
+int measureAmplitude (AmplitudeMeasure &m, int value) {
     if (m.valueTimestamp < (msec / (1000 / measureSecFraction))) {
         m.valueTimestamp = (msec / (1000 / measureSecFraction));
 
@@ -143,32 +212,46 @@ int measure(Measure &m, int value) {
     return m.value;
 }
 
-void updateVoltage() {
-    int value = measure(voltage, analogRead(A0));
+void updateVoltage () {
+    int value = measureAmplitude(voltage, analogRead(A0));
 }
 
-void monitorVoltage() {
+void chooseAction (Measure m) {
+    if (m.value == 0 && m.prevValue == 0)  {
+        m.isControlLinesAllowed = true;
+    } else {
+        if (m.value <= m.boundaries.bottomAllowedValue && m.prevValue <= m.boundaries.bottomAllowedValue) {
+            shutdownGenInput();
+            m.isControlLinesAllowed = false;
+        } else if (m.value >= m.boundaries.topAllowedValue && m.prevValue >= m.boundaries.topAllowedValue) {
+            deactivateAll();
+            m.isControlLinesAllowed = false;
+        } else if (m.value <= m.boundaries.linesShutdownValue && m.prevValue <= m.boundaries.linesShutdownValue) {
+            deactivateAll();
+            m.isControlLinesAllowed = false;
+        } else if (m.value <= m.boundaries.lineBanValue && (sec - lastLineShutdownTimestamp > lineShutdownInterval)) {
+            shutdownLine();
+            m.isControlLinesAllowed = false;
+        } else {
+            m.isControlLinesAllowed = true;
+        }
+    }
+}
+
+void monitorVoltage () {
     updateVoltage();
 
-    if (voltage.value > topAllowedVoltage && voltage.prevValue > topAllowedVoltage) {
-        deactivateAll();
+    if (voltage.value <= bottomMeasurementVoltage && voltage.prevValue <= bottomMeasurementVoltage)  {
+        voltage.value = 0;
     }
 
-    if (voltage.value < bottomAllowedVoltage && voltage.prevValue < bottomAllowedVoltage) {
-        deactivateAll();
-    }
-
-    if (voltage.value < lineBanVoltage && (sec - lastShotdownTimestamp > genRestoreSeconds)) {
-        shutdownLine();
-    }
+    chooseAction(voltage);
 }
 
 void populateSingleLineData (ControlLine &cl) {
     int value = analogRead(cl.inputPin);
 
-    measure(cl.current, value);
-
-    //TODO create history
+    measureAmplitude(cl.current, value);
 }
 
 void monitorControlLines () {
@@ -176,10 +259,22 @@ void monitorControlLines () {
         populateSingleLineData(controlLines[i]);
 
         if (!controlLines[i].isActive && controlLines[i].timeoutUntil < sec) {
-            if (voltage.value > lineBanVoltage && ((sec - lastActivationTimestamp) > activationInterval)) {
+            if (voltage.isControlLinesAllowed && frequency.isControlLinesAllowed && ((sec - lastLineActivationTimestamp) > activationInterval)) {
                 activateConrolLine(controlLines[i]);
             }
         }
+    }
+}
+
+void monitorFrequency () {
+    measureFrequency(frequency);
+
+    chooseAction(frequency);
+}
+
+void monitorGenInput () {
+    if ((sec - lastGenShutdownTimestamp) > genRestoreInterval) {
+        digitalWrite(genControlPin, LOW);
     }
 }
 
@@ -189,6 +284,9 @@ void printInfo () {
     if (sec - lastPrintTimestamp > 2) {
         prevLastPrintTimestamp = lastPrintTimestamp;
         lastPrintTimestamp = sec;
+
+        Serial.print(" ");
+        Serial.print(frequency.value);
 
         Serial.print(" ");
         Serial.print(voltage.value);
@@ -215,8 +313,10 @@ void loop(void) {
     msec = millis();
     sec = msec / 1000;
 
+    monitorFrequency();
     monitorVoltage();
     monitorControlLines();
+    monitorGenInput();
 
     printInfo();
     delay(random(4));
