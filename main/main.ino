@@ -7,10 +7,10 @@
 #define genRestoreInterval 10
 #define measureSecFraction 4
 
-#define bottomMeasurementVoltage 150
+#define bottomMeasurementVoltage 188
 
-#define voltageBoundaries {260, 215, 200, 190}
-#define frequencyBoundaries {60, 48, 42, 38}
+#define voltageBoundaries {260, 210, 200, 190}
+#define frequencyBoundaries {80, 48, 44, 38}
 
 byte status;
 
@@ -288,7 +288,7 @@ void monitorGenInput () {
 unsigned long lastPrintTimestamp;
 unsigned long prevLastPrintTimestamp;
 void printInfo () {
-    if (sec - lastPrintTimestamp > 2) {
+    if (sec - lastPrintTimestamp > 0) {
         prevLastPrintTimestamp = lastPrintTimestamp;
         lastPrintTimestamp = sec;
 
@@ -297,14 +297,14 @@ void printInfo () {
         Serial.print("Hz");
 
         Serial.print(" => ");
-        Serial.print(frequency.isControlLinesAllowed ? " GO " : "NO GO");
+        Serial.print(frequency.isControlLinesAllowed ? " GO  " : "NO GO");
 
         Serial.print(" | ");
         Serial.print(voltage.value);
         Serial.print("v");
 
         Serial.print(" => ");
-        Serial.print(voltage.isControlLinesAllowed ? " GO " : "NO GO");
+        Serial.print(voltage.isControlLinesAllowed ? " GO  " : "NO GO");
 
 
         Serial.print(" | ");
