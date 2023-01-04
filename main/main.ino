@@ -10,8 +10,8 @@
 #define bottomMeasurementVoltage 188
 
 #define voltageBoundaries {260, 210, 200, 190}
-#define frequencyBoundaries {80, 48, 44, 38}
-
+#define frequencyBoundaries {60, 48, 44, 38}
+#define isTopBoundarieAllowed false;
 byte status;
 
 unsigned long msec;
@@ -229,7 +229,7 @@ void chooseAction (Measure &m) {
         if (m.value <= m.boundaries.bottomAllowedValue && m.prevValue <= m.boundaries.bottomAllowedValue) {
             shutdownGenInput();
             m.isControlLinesAllowed = false;
-        } else if (m.value >= m.boundaries.topAllowedValue && m.prevValue >= m.boundaries.topAllowedValue) {
+        } else if (isTopBoundarieAllowed && m.value >= m.boundaries.topAllowedValue && m.prevValue >= m.boundaries.topAllowedValue) {
             deactivateAll();
             m.isControlLinesAllowed = false;
         } else if (m.value <= m.boundaries.linesShutdownValue && m.prevValue <= m.boundaries.linesShutdownValue) {
