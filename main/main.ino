@@ -11,7 +11,7 @@
 
 #define voltageBoundaries {260, 210, 200, 190}
 #define frequencyBoundaries {60, 48, 44, 38}
-#define isTopBoundarieAllowed false;
+#define isTopBoundarieAllowed false
 byte status;
 
 unsigned long msec;
