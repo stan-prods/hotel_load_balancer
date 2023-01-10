@@ -55,6 +55,7 @@ struct FrequencyMeasure : Measure {
 
 
 struct ControlLine {
+    bool isPrioLine;
     byte inputPin;
     byte outputPin;
     int smallBreakSecs;
@@ -68,12 +69,12 @@ struct ControlLine {
 
 const int controlLinesAmount = 6;
 ControlLine controlLines[controlLinesAmount] {
-    {A1, 9, 60, 60},
-    {A2, 8, 60, 900},
-    {A3, 7, 60, 900},
-    {A4, 6, 60, 900},
-    {A5, 5, 60, 900},
-    {A6, 4, 60, 120}
+    {true, A1, 9, 60, 60},
+    {false, A2, 8, 60, 900},
+    {false, A3, 7, 60, 900},
+    {false, A4, 6, 60, 900},
+    {false, A5, 5, 60, 900},
+    {true, A6, 4, 60, 120}
 };
 
 ControlLine activateConrolLine (ControlLine &cl) {
@@ -136,9 +137,13 @@ void setup (void) {
 }
 
 
-ControlLine shutdownLine () {
+ControlLine shutdownLine (bool includePrio = false) {
     int biggest = -1;
     for (byte i = 0; i < controlLinesAmount; i++) {
+        if (includePrio && controlLines[i].isPrioLine) {
+            continue;
+        }
+
         if (!controlLines[i].isActive) {
             continue;
         }
@@ -153,12 +158,16 @@ ControlLine shutdownLine () {
         }
     }
 
-    banControlLine(controlLines[biggest]);
-    lastLineShutdownTimestamp = sec;
+    if (biggest == -1) {
+        return shutdownLine(true);
+    } else {
+        banControlLine(controlLines[biggest]);
+        lastLineShutdownTimestamp = sec;
+        status = 5;
+        return controlLines[biggest];
+    }
 
-    status = 5;
 
-    return controlLines[biggest];
 }
 
 
