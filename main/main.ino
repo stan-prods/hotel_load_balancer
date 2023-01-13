@@ -10,7 +10,7 @@
 #define bottomMeasurementVoltage 188
 
 #define voltageBoundaries {260, 210, 200, 190}
-#define frequencyBoundaries {60, 48, 44, 38}
+#define frequencyBoundaries {70, 47, 44, 38}
 #define isTopBoundarieAllowed false
 byte status;
 
@@ -69,12 +69,12 @@ struct ControlLine {
 
 const int controlLinesAmount = 6;
 ControlLine controlLines[controlLinesAmount] {
-    {true, A1, 9, 60, 60},
+    {true, A1, 9, 5, 5},
     {false, A2, 8, 60, 900},
     {false, A3, 7, 60, 900},
     {false, A4, 6, 60, 900},
     {false, A5, 5, 60, 900},
-    {true, A6, 4, 60, 120}
+    {false, A6, 4, 60, 120}
 };
 
 ControlLine activateConrolLine (ControlLine &cl) {
@@ -90,6 +90,8 @@ ControlLine activateConrolLine (ControlLine &cl) {
 ControlLine deactivateControlLine (ControlLine &cl) {
     cl.isActive = false;
     digitalWrite(cl.outputPin, LOW);
+
+    return cl;
 }
 
 void deactivateAll () {
@@ -137,10 +139,10 @@ void setup (void) {
 }
 
 
-ControlLine shutdownLine (bool includePrio = false) {
+void shutdownLine (bool includePrio) {
     int biggest = -1;
     for (byte i = 0; i < controlLinesAmount; i++) {
-        if (includePrio && controlLines[i].isPrioLine) {
+        if (!includePrio && controlLines[i].isPrioLine) {
             continue;
         }
 
@@ -158,13 +160,12 @@ ControlLine shutdownLine (bool includePrio = false) {
         }
     }
 
-    if (biggest == -1) {
-        return shutdownLine(true);
-    } else {
+    if (!includePrio && biggest == -1) {
+        shutdownLine(true);
+    } else if (biggest > -1) {
         banControlLine(controlLines[biggest]);
         lastLineShutdownTimestamp = sec;
         status = 5;
-        return controlLines[biggest];
     }
 
 
@@ -245,7 +246,7 @@ void chooseAction (Measure &m) {
             deactivateAll();
             m.isControlLinesAllowed = false;
         } else if (m.value <= m.boundaries.lineBanValue && (sec - lastLineShutdownTimestamp > lineShutdownInterval)) {
-            shutdownLine();
+            shutdownLine(false);
             m.isControlLinesAllowed = false;
         } else {
             m.isControlLinesAllowed = true;
