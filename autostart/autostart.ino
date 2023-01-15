@@ -21,13 +21,120 @@
     if generator is powerking, then switch to charge from gen. Else charge from mains
 */
 
-void setup() {
-  // put your setup code here, to run once:
+//inputs
+#define mainsPresentCV 4
+#define generatorBasedPowerPin 5
 
+//outputs
+#define powerSourceSelectRelayPin 6
+#define gasValveRelayPin 7
+#define gasValvePowerSourceSelectPin 8
+#define starterRelayPin 9
+
+//constants
+#define gasValveOpenDelaySecs 5
+#define starterActiveDelaySecs 10
+#define generatorCooldownDelaySecs 10
+
+
+
+bool isStarterRunning, isGeneratorWorking, isMainsPresent;
+uint8_t attempts;
+
+unsigned long secs;
+unsigned long starterEnabledTimestampSecs;
+unsigned long generatorCooldownStartedTimestampSecs;
+
+
+void setup() {
+
+}
+
+void checkStatus() {
+    isGeneratorWorking = digitalRead(generatorBasedPowerPin);
+    isMainsPresent = digitalRead(mainsPresentCV);
 }
 
 void loop() {
-  // put your main code here, to run repeatedly:
+    secs = millis() / 1000;
+
+    checkStatus();
+    checkStarter();
+
+    if (!isGeneratorWorking && !isMainsPresent) {
+        startGenerator();
+    }
+
+    if (isGeneratorWorking && isMainsPresent) {
+        stopGenerator();
+    }
+
 
 }
 
+void powerSelect() {
+    digitalWrite(powerSourceSelectRelayPin, isGeneratorWorking)
+}
+
+
+void startGenerator() {
+    if (attempts >= 3) {
+        return;
+    }
+    //open gas valve
+    digitalWrite(gasValvePowerSourceSelectPin, HIGH);
+    digitalWrite(gasValveRelayPin, HIGH);
+
+    //if first attempt, let gas flow
+    if (attempts == 0) {
+        delay(gasValveOpenDelaySecs * 1000);
+    }
+
+    runStarter();
+}
+
+void stopGenerator() {
+    if (!generatorCooldownStartedTimestampSecs) {
+        generatorCooldownDelaySecs = secs;
+    }
+
+    if (secs - generatorCooldownStartedTimestampSecs >= generatorCooldownDelaySecs) {
+        digitalWrite(gasValveRelayPin, LOW);
+        generatorCooldownStartedTimestampSecs = 0;
+    }
+}
+
+void runStarter() {
+    if (!isStarterRunning) {
+        digitalWrite(starterRelayPin, HIGH);
+        starterEnabledTimestampSecs = secs;
+        isStarterRunning = true;
+    }
+}
+
+void stopStarter() {
+    digitalWrite(starterRelayPin, LOW);
+    starterEnabledTimestampSecs = 0;
+    isStarterRunning = false;
+}
+
+void checkStarter() {
+    if (!isStarterRunning) {
+        return;
+    }
+
+    if (isGeneratorWorking) {
+        stopStarter();
+        attempts = 0;
+
+        digitalWrite(gasValvePowerSourceSelectPin, LOW);
+    }
+
+    if (secs - starterEnabledTimestampSecs >= starterActiveDelaySecs) {
+        stopStarter();
+        attempts++;
+
+        digitalWrite(gasValvePowerSourceSelectPin, LOW);
+        digitalWrite(gasValveRelayPin, LOW);
+    }
+}
