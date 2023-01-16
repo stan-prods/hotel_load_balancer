@@ -1,20 +1,20 @@
 /*
     Outputs:
-    1 - status led(s)
-    2 - servo
-    3 - main contactor control voltage
+    1 - status led(s) //not implemented yet
+    2 - servo //not implemented yet
+    3 - main contactor control voltage //not implemented yet
 
         Relays:
         1 - power source select generator/line
         2 - gas valve
         3 - gas valve powering from battery (for egnition)
-        4 - egnition key position
+        4 - starter
 
     Inputs:
     1 - 5v when line is present
     2 - 5v when generator is started working
-    3 - manual gas valve control switch
-    4 - manual servo control pot
+    3 - manual gas valve control switch //not implemented yet
+    4 - manual servo control pot //not implemented yet
 
 
     powering from usb
