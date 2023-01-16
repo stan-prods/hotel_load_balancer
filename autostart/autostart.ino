@@ -122,16 +122,13 @@ void loop() {
     }
 
     if (!isGeneratorWorking && isMainsPresent) {
-        digitalWrite(gasValvePowerSourceSelectPin, disable);
-        isValveOnBattery = false;
-        digitalWrite(gasValveRelayPin, disable);
-        isValveOpen = false;
+        enableValve(false);
+
         stopStarter();
     }
 
     if (isGeneratorWorking && isValveOnBattery) {
-        digitalWrite(gasValvePowerSourceSelectPin, disable);
-        isValveOnBattery = false;
+        powerValveFromBattery(false);
     }
 
     powerSelect();
@@ -150,11 +147,8 @@ void startGenerator() {
         return;
     }
     //open gas valve
-    digitalWrite(gasValvePowerSourceSelectPin, enable);
-    isValveOnBattery = true;
-
-    digitalWrite(gasValveRelayPin, enable);
-    isValveOpen = true;
+    powerValveFromBattery();
+    enableValve();
 
     //if first attempt, let gas flow
     if (attempts == 0 && gasValveOpenOnStartTimestampSecs == 0) {
@@ -201,6 +195,20 @@ void stopStarter() {
     isStarterRunning = false;
 }
 
+void enableValve(bool isValveShouldBeOpen = true) {
+    isValveOpen = valveState;
+    digitalWrite(gasValveRelayPin, valveState ? enable : disable);
+
+    if (!isValveOpen) {
+        powerValveFromBattery(false);
+    }
+}
+
+void powerValveFromBattery(bool isValveShouldBePoweredFromBattery = true) {
+    isValveOnBattery = isValveShouldBePoweredFromBattery;
+    digitalWrite(gasValvePowerSourceSelectPin, isValveOnBattery ? enable : disable);
+}
+
 void checkStarter() {
     if (!isStarterRunning) {
         return;
@@ -209,10 +217,8 @@ void checkStarter() {
     if (isMainsPresent) {
         stopStarter();
         attempts = 0;
-        digitalWrite(gasValvePowerSourceSelectPin, disable);
-        isValveOnBattery = false;
-        digitalWrite(gasValveRelayPin, disable);
-        isValveOpen = false;
+
+        enableValve(false);
     }
 
     if (isGeneratorWorking) {
@@ -220,17 +226,14 @@ void checkStarter() {
         stopStarter();
         attempts = 0;
 
-        digitalWrite(gasValvePowerSourceSelectPin, disable);
-        isValveOnBattery = false;
+        powerValveFromBattery(false);
     } else if (secs - starterEnabledTimestampSecs >= starterActiveDelaySecs) {
         Serial.print(", Generator start failed");
         stopStarter();
         attempts++;
 
-        digitalWrite(gasValvePowerSourceSelectPin, disable);
-        isValveOnBattery = false;
-        digitalWrite(gasValveRelayPin, disable);
-        isValveOpen = false;
+        enableValve(false);
+
         starterPauseStartedTimestampSecs = secs;
     }
 }
