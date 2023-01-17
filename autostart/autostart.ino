@@ -21,6 +21,8 @@
     if generator is powerking, then switch to charge from gen. Else charge from mains
 */
 
+#include "states.h"
+
 //inputs
 #define generatorBasedPowerPin 34
 #define mainsPresentCV 35
@@ -106,34 +108,18 @@ void checkStatus() {
     Serial.println("");
 }
 
-void loop() {
-    msecs = millis();
-    secs = msecs / 1000;
+void powerValveFromBattery(bool isValveShouldBePoweredFromBattery = true) {
+    isValveOnBattery = isValveShouldBePoweredFromBattery;
+    digitalWrite(gasValvePowerSourceSelectPin, isValveOnBattery ? enable : disable);
+}
 
-    checkStatus();
-    checkStarter();
+void enableValve(bool isValveShouldBeOpen = true) {
+    isValveOpen = isValveShouldBeOpen;
+    digitalWrite(gasValveRelayPin, isValveShouldBeOpen ? enable : disable);
 
-    if (!isGeneratorWorking && !isMainsPresent) {
-        startGenerator();
-    }
-
-    if (isGeneratorWorking && isMainsPresent) {
-        stopGenerator();
-    }
-
-    if (!isGeneratorWorking && isMainsPresent) {
-        enableValve(false);
-
-        stopStarter();
-    }
-
-    if (isGeneratorWorking && isValveOnBattery) {
+    if (!isValveOpen) {
         powerValveFromBattery(false);
     }
-
-    powerSelect();
-
-    delay(30);
 }
 
 void powerSelect() {
@@ -195,20 +181,6 @@ void stopStarter() {
     isStarterRunning = false;
 }
 
-void enableValve(bool isValveShouldBeOpen = true) {
-    isValveOpen = valveState;
-    digitalWrite(gasValveRelayPin, valveState ? enable : disable);
-
-    if (!isValveOpen) {
-        powerValveFromBattery(false);
-    }
-}
-
-void powerValveFromBattery(bool isValveShouldBePoweredFromBattery = true) {
-    isValveOnBattery = isValveShouldBePoweredFromBattery;
-    digitalWrite(gasValvePowerSourceSelectPin, isValveOnBattery ? enable : disable);
-}
-
 void checkStarter() {
     if (!isStarterRunning) {
         return;
@@ -237,3 +209,34 @@ void checkStarter() {
         starterPauseStartedTimestampSecs = secs;
     }
 }
+
+void loop() {
+    msecs = millis();
+    secs = msecs / 1000;
+
+    checkStatus();
+    checkStarter();
+
+    if (!isGeneratorWorking && !isMainsPresent) {
+        startGenerator();
+    }
+
+    if (isGeneratorWorking && isMainsPresent) {
+        stopGenerator();
+    }
+
+    if (!isGeneratorWorking && isMainsPresent) {
+        enableValve(false);
+
+        stopStarter();
+    }
+
+    if (isGeneratorWorking && isValveOnBattery) {
+        powerValveFromBattery(false);
+    }
+
+    powerSelect();
+
+    delay(30);
+}
+
