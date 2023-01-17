@@ -1,17 +1,6 @@
-#define frequencyMeasurePin 2
-#define genControlPin 3
+#include "structures.h"
+#include "constants.h"
 
-#define attemptMinutes 10
-#define activationInterval 8
-#define lineShutdownInterval 0 //time before disabling next cl
-#define genRestoreInterval 10
-#define measureSecFraction 4
-
-#define bottomMeasurementVoltage 188
-
-#define voltageBoundaries {260, 210, 200, 190}
-#define frequencyBoundaries {70, 47, 44, 38}
-#define isTopBoundarieAllowed false
 byte status;
 
 unsigned long msec;
@@ -20,62 +9,6 @@ unsigned long sec;
 unsigned long lastLineShutdownTimestamp;
 unsigned long lastLineActivationTimestamp;
 unsigned long lastGenShutdownTimestamp;
-
-struct Boundaries {
-    int topAllowedValue;
-    byte lineBanValue;
-    byte linesShutdownValue;
-    byte bottomAllowedValue;
-} noBoundaries;
-
-struct Measure {
-    int value;
-    int prevValue;
-
-    unsigned long valueTimestamp;
-
-    bool isControlLinesAllowed;
-    Boundaries boundaries = noBoundaries;
-};
-
-struct AmplitudeMeasure : Measure {
-    int minAverageValue;
-    int maxAverageValue;
-    int sinCenter;
-    int measuresCount;
-    int prevValueMeasuresCount;
-} voltage;
-
-struct FrequencyMeasure : Measure {
-    int reading;
-    int prevReading;
-
-    int interruptsCount;
-} frequency;
-
-
-struct ControlLine {
-    bool isPrioLine;
-    byte inputPin;
-    byte outputPin;
-    int smallBreakSecs;
-    int bigBreakSecs;
-    AmplitudeMeasure current;
-    bool isActive;
-    unsigned long timeoutUntil;
-    byte attempts;
-};
-
-
-const int controlLinesAmount = 6;
-ControlLine controlLines[controlLinesAmount] {
-    {true, A1, 9, 5, 5},
-    {false, A2, 8, 60, 900},
-    {false, A3, 7, 60, 900},
-    {false, A4, 6, 60, 900},
-    {false, A5, 5, 60, 900},
-    {false, A6, 4, 60, 120}
-};
 
 ControlLine activateConrolLine (ControlLine &cl) {
     if (cl.timeoutUntil < sec) {
