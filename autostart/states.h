@@ -1,22 +1,42 @@
 #define statesAmount 5
 
-struct Flags {};
-
-class State {
-    public:
-        virtual void notify(String*, Flags*);
-        virtual State* leaving() {return this;};
-        virtual State* entering() {return this;};
+struct Flags {
+    bool isMainsPresent = false;
+    bool isGeneratorWorking = false;
+    bool isValveOpen = false;
+    bool isValveOnBattery = false;
+    bool isStarterRunning = false;
 };
 
-class Statefull {
+enum event {startCommand, stopCommand};
+
+class StateCallback {
     public:
-        virtual void onStateEvent (String*) =0;
+        virtual void fireEvent (event ev) {this->onStateEvent(ev);};
+        virtual bool applyFlags() =0;
 
     protected:
+        virtual void onStateEvent (event) =0;
+
+};
+class State {
+    public:
+        virtual void notify(event ev, Flags& f, StateCallback* SC) {this->onEvent(ev, f, SC);};
+        virtual State* leaving() {return this;};
+        virtual State* entering() {return this;};
+
+    private:
+        virtual void onEvent(event, Flags&, StateCallback*);
+};
+
+class Statefull : public StateCallback {
+    private:
+        State states[statesAmount];
+
+    protected:
+        Flags flags;
         enum stateName {};
         uint8_t state;
-        State *states[statesAmount];
 
         State* setState (stateName name) {
             this->getState()->leaving();
@@ -25,41 +45,29 @@ class Statefull {
             return this->getState()->entering();
         };
         State* getState () {
-            return this->states[this->state];
+            return &this->states[this->state];
         };
 };
 
-class Idle : public State {
-    public:
-        virtual void notify(String*, Flags*);
-};
-
-class Starting : public State {
-    public:
-        virtual void notify(String*, Flags*);
-};
-
-class Running : public State {
-    public:
-        virtual void notify(String*, Flags*);
-};
-
-class Stoping : public State {
-    public:
-        virtual void notify(String*, Flags*);
-};
-
-class IdleOnError : public State {
-    public:
-        virtual void notify(String*, Flags*);
-};
+class Idle : public State {};
+class Starting : public State {};
+class Running : public State {};
+class Stoping : public State {};
+class IdleOnError : public State {};
 
 class Generator : public Statefull {
     public:
-        virtual void onStateEvent (String*);
-
+        bool start () {
+            this->getState()->notify(startCommand, flags, this);
+        };
+        bool stop () {
+            this->getState()->notify(stopCommand, flags, this);
+        };
     protected:
         enum stateName {idle, idleOnError, starting, stoping, running};
+        virtual void onStateEvent (event);
+
+    private:
         State states[statesAmount] {
             Idle(),
             IdleOnError(),
