@@ -10,26 +10,25 @@ struct Flags {
 
 enum event {startCommand, stopCommand};
 
-class StateCallback {
+class EventReciever {
     public:
-        virtual void fireEvent (event ev) {this->onStateEvent(ev);};
-        virtual bool applyFlags() =0;
+        virtual void fireEvent (event ev, Flags& f, EventReciever* ER) {this->onIncomingEvent(ev, f, ER);};
 
     protected:
-        virtual void onStateEvent (event) =0;
+        virtual void onIncomingEvent (event, Flags&, EventReciever*) =0;
 
 };
-class State {
+class State : public EventReciever {
     public:
-        virtual void notify(event ev, Flags& f, StateCallback* SC) {this->onEvent(ev, f, SC);};
         virtual State* leaving() {return this;};
         virtual State* entering() {return this;};
 
-    private:
-        virtual void onEvent(event, Flags&, StateCallback*);
+    protected:
+        virtual void onIncomingEvent (event, Flags&, EventReciever*);
+
 };
 
-class Statefull : public StateCallback {
+class Statefull : public EventReciever {
     private:
         State states[statesAmount];
 
@@ -58,14 +57,14 @@ class IdleOnError : public State {};
 class Generator : public Statefull {
     public:
         bool start () {
-            this->getState()->notify(startCommand, flags, this);
+            this->getState()->fireEvent(startCommand, flags, this);
         };
         bool stop () {
-            this->getState()->notify(stopCommand, flags, this);
+            this->getState()->fireEvent(stopCommand, flags, this);
         };
     protected:
         enum stateName {idle, idleOnError, starting, stoping, running};
-        virtual void onStateEvent (event);
+        virtual void onIncomingEvent (event);
 
     private:
         State states[statesAmount] {
