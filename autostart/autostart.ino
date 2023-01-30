@@ -71,6 +71,20 @@ void setup() {
 
 }
 
+void powerValveFromBattery(bool isValveShouldBePoweredFromBattery = true) {
+    isValveOnBattery = isValveShouldBePoweredFromBattery;
+    digitalWrite(gasValvePowerSourceSelectPin, isValveOnBattery ? enable : disable);
+}
+
+void enableValve(bool isValveShouldBeOpen = true) {
+    isValveOpen = isValveShouldBeOpen;
+    digitalWrite(gasValveRelayPin, isValveShouldBeOpen ? enable : disable);
+
+    if (!isValveOpen) {
+        powerValveFromBattery(false);
+    }
+}
+
 void checkStatus() {
     //TODO add debounce
     bool genPowerVal = digitalRead(generatorBasedPowerPin);
@@ -133,7 +147,7 @@ void loop() {
 
     powerSelect();
 
-    delay(30);
+    delay(100);
 }
 
 void powerSelect() {
@@ -193,20 +207,6 @@ void stopStarter() {
     starterEnabledTimestampSecs = 0;
     gasValveOpenOnStartTimestampSecs = 0;
     isStarterRunning = false;
-}
-
-void enableValve(bool isValveShouldBeOpen = true) {
-    isValveOpen = valveState;
-    digitalWrite(gasValveRelayPin, valveState ? enable : disable);
-
-    if (!isValveOpen) {
-        powerValveFromBattery(false);
-    }
-}
-
-void powerValveFromBattery(bool isValveShouldBePoweredFromBattery = true) {
-    isValveOnBattery = isValveShouldBePoweredFromBattery;
-    digitalWrite(gasValvePowerSourceSelectPin, isValveOnBattery ? enable : disable);
 }
 
 void checkStarter() {
