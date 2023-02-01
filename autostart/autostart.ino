@@ -37,6 +37,7 @@
 #define starterPauseDelaySecs 20
 #define generatorCooldownDelaySecs 10
 #define allowedAttempts 4
+#define debounceMsecs 150
 
 enum Activity {enable, disable};
 
@@ -48,7 +49,8 @@ unsigned long msecs;
 unsigned long starterEnabledTimestampSecs;
 unsigned long generatorCooldownStartedTimestampSecs;
 unsigned long starterPauseStartedTimestampSecs;
-unsigned long inputValueChangedTimestampMsecs;
+unsigned long mainsInputValueChangedTimestampMsecs;
+unsigned long genInputValueChangedTimestampMsecs;
 unsigned long gasValveOpenOnStartTimestampSecs;
 
 
@@ -88,20 +90,33 @@ void enableValve(bool isValveShouldBeOpen = true) {
 void checkStatus() {
     //TODO add debounce
     bool genPowerVal = digitalRead(generatorBasedPowerPin);
-    bool mainsPowerVal = digitalRead(mainsPresentCV);
 
-    if (genPowerVal != isGeneratorWorking || mainsPowerVal != isMainsPresent) {
-        if (!inputValueChangedTimestampMsecs) {
-            inputValueChangedTimestampMsecs = msecs;
+    if (genPowerVal != isGeneratorWorking) {
+        if (!genInputValueChangedTimestampMsecs) {
+            genInputValueChangedTimestampMsecs = msecs;
+        } else if (msecs - genInputValueChangedTimestampMsecs > debounceMsecs) {
+            attempts = 0;
+            genInputValueChangedTimestampMsecs = 0;
+            isGeneratorWorking = genPowerVal;
         }
+    } else {
+      genInputValueChangedTimestampMsecs = 0;
     }
 
-    if (inputValueChangedTimestampMsecs > 0 && msecs - inputValueChangedTimestampMsecs > 15) {
-        attempts = 0;
-        inputValueChangedTimestampMsecs = 0;
-        isGeneratorWorking = genPowerVal;
-        isMainsPresent = mainsPowerVal;
+
+    bool mainsPowerVal = digitalRead(mainsPresentCV);
+    if (mainsPowerVal != isMainsPresent) {
+        if (!mainsInputValueChangedTimestampMsecs) {
+            mainsInputValueChangedTimestampMsecs = msecs;
+        } else if (msecs - mainsInputValueChangedTimestampMsecs > debounceMsecs) {
+            attempts = 0;
+            mainsInputValueChangedTimestampMsecs = 0;
+            isMainsPresent = mainsPowerVal;
+        }
+    } else {
+      mainsInputValueChangedTimestampMsecs = 0;
     }
+
 
     Serial.println("");
     Serial.println("");
@@ -147,7 +162,7 @@ void loop() {
 
     powerSelect();
 
-    delay(100);
+    delay(10);
 }
 
 void powerSelect() {
