@@ -25,11 +25,15 @@
 #define generatorBasedPowerPin 34
 #define mainsPresentCV 35
 
-//outputs
+//outputs, relays
 #define powerSourceSelectRelayPin 27
 #define gasValveRelayPin 26
 #define gasValvePowerSourceSelectPin 25
 #define starterRelayPin 33
+
+//outputs, indicators
+#define genPowerIndicator 16
+#define mainsPowerIndicator 17
 
 //constants
 #define gasValveOpenDelaySecs 5
@@ -71,6 +75,12 @@ void setup() {
     pinMode(starterRelayPin, OUTPUT);
     digitalWrite(starterRelayPin, disable);
 
+    pinMode(genPowerIndicator, OUTPUT);
+    digitalWrite(genPowerIndicator, LOW);
+
+    pinMode(mainsPowerIndicator, OUTPUT);
+    digitalWrite(mainsPowerIndicator, LOW);
+
 }
 
 void powerValveFromBattery(bool isValveShouldBePoweredFromBattery = true) {
@@ -89,8 +99,9 @@ void enableValve(bool isValveShouldBeOpen = true) {
 
 void checkStatus() {
     //TODO add debounce
-    bool genPowerVal = digitalRead(generatorBasedPowerPin);
 
+    bool genPowerVal = digitalRead(generatorBasedPowerPin);
+    digitalWrite(genPowerIndicator, genPowerVal);
     if (genPowerVal != isGeneratorWorking) {
         if (!genInputValueChangedTimestampMsecs) {
             genInputValueChangedTimestampMsecs = msecs;
@@ -105,6 +116,7 @@ void checkStatus() {
 
 
     bool mainsPowerVal = digitalRead(mainsPresentCV);
+    digitalWrite(mainsPowerIndicator, mainsPowerVal);
     if (mainsPowerVal != isMainsPresent) {
         if (!mainsInputValueChangedTimestampMsecs) {
             mainsInputValueChangedTimestampMsecs = msecs;
