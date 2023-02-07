@@ -18,31 +18,34 @@
 
 ESP8266WiFiMulti WiFiMulti;
 
+#define actionPin 0
 #define numberOfRepeatedStatusedForAction 5
 
 int statusRepeatCounter = 0;
 enum activationStatus {relayOn, relayOff};
 bool currentStatus = relayOff;
+bool debouncedStatus = currentStatus;
 
 const char *ssid = "MOHAPX_WIFI";
 const char *password = "";
 
-void takeAction(bool requestedState = false) {
+void takeAction(bool requestedState = relayOff) {
     Serial.println(requestedState == relayOn ? "On state request" : "Off state request");
     Serial.println(currentStatus == relayOn ? "Current state == On" : "Current state == Off");
 
-    if (currentStatus == requestedState) {
+    if (debouncedStatus == requestedState) {
         statusRepeatCounter++;
         if (statusRepeatCounter > 100) {
             statusRepeatCounter = numberOfRepeatedStatusedForAction;
         }
 
         if (statusRepeatCounter >= numberOfRepeatedStatusedForAction) {
-            digitalWrite(0, currentStatus);
+            currentStatus = debouncedStatus;
+            digitalWrite(actionPin, currentStatus);
             Serial.println(currentStatus == relayOn ? "Setting state == On" : "Setting state == Off");
         }
     } else {
-        currentStatus = requestedState;
+        debouncedStatus = requestedState;
         statusRepeatCounter = 1;
     }
 }
@@ -88,9 +91,9 @@ bool requestPermission () {
 }
 
 void setup() {
-    digitalWrite(0, currentStatus);
-    pinMode(0, OUTPUT);
-    digitalWrite(0, currentStatus);
+    digitalWrite(actionPin, currentStatus);
+    pinMode(actionPin, OUTPUT);
+    digitalWrite(actionPin, currentStatus);
 
     Serial.begin(115200);
     // Serial.setDebugOutput(true);
